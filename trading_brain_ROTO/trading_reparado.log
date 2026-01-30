@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/iniciar_sistema_futures.py", line 18, in main
+    from core.sistema_principal_futures import SistemaPrincipalFutures
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/core/sistema_principal_futures.py", line 30, in <module>
+    from cerebros.cerebro_btc import CerebroBTC
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/cerebros/cerebro_btc.py", line 7
+    def __init__(self, "BTCUSDT", "ema_ribbon_rsi"):
+                       ^^^^^^^^^
+SyntaxError: invalid syntax
+🚀 Iniciando Sistema de Trading Futures...
+📁 Directorio: /data/data/com.termux/files/home/bot_trading/trading_brain
+❌ Error inesperado: invalid syntax (cerebro_btc.py, line 7)

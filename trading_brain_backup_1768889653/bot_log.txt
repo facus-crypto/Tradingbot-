@@ -1,0 +1,44 @@
+🚀 Iniciando Sistema de Trading Futures...
+📁 Directorio: /data/data/com.termux/files/home/bot_trading/trading_brain
+2026-01-15 20:45:08,384 - core.sistema_principal_futures - INFO - ✅ Todos los cerebros Futures importados correctamente
+2026-01-15 20:45:09,683 - core.sistema_principal_futures - INFO - ✅ Configuración cargada desde config_futures.json
+2026-01-15 20:45:09,683 - core.sistema_principal_futures - INFO - 🚀 Sistema Principal Futures inicializado
+⏳ Inicializando componentes...
+2026-01-15 20:45:09,683 - core.sistema_principal_futures - INFO - 🚀 Iniciando Sistema Principal Futures...
+2026-01-15 20:45:09,683 - core.sistema_principal_futures - INFO - 1️⃣ Inicializando Binance Futures...
+2026-01-15 20:45:09,683 - binance_manager_custom - WARNING - ⚠️  Usando BINANCE REAL (dinero real)
+2026-01-15 20:45:09,684 - binance_manager_custom - INFO - ✅ Binance Manager Custom inicializado
+2026-01-15 20:45:09,684 - binance_manager_custom - INFO -    • Base URL: https://fapi.binance.com
+2026-01-15 20:45:09,684 - binance_manager_custom - INFO -    • API Key: 1JuwHBEThWq06lI...
+2026-01-15 20:45:09,684 - binance_manager_custom - INFO - ⚙️  Leverage configurado a 2X (simulado)
+2026-01-15 20:45:09,684 - binance_manager_custom - INFO - ⚙️  Margen configurado a ISOLATED (simulado)
+2026-01-15 20:45:10,170 - binance_manager_custom - INFO - 💰 Balance: 233.84 USDT
+2026-01-15 20:45:10,170 - core.sistema_principal_futures - INFO - 💰 Balance Binance: 233.84 USDT
+2026-01-15 20:45:10,170 - core.sistema_principal_futures - INFO - 2️⃣ Inicializando Telegram...
+2026-01-15 20:45:10,170 - core.sistema_principal_futures - ERROR - ❌ Error inicializando Telegram: TelegramAdvancedBot.__init__() got an unexpected keyword argument 'binance_manager'
+2026-01-15 20:45:10,170 - core.sistema_principal_futures - WARNING - ⚠️  Telegram no inicializado, continuando sin notificaciones
+2026-01-15 20:45:10,171 - core.sistema_principal_futures - INFO - 3️⃣ Inicializando cerebros...
+2026-01-15 20:45:10,171 - cerebros.cerebro_base_futures - INFO - 🧠 Cerebro base inicializado para BTCUSDT
+2026-01-15 20:45:10,171 - cerebros.cerebro_btc_futures - INFO - 🧠 Cerebro BTC inicializado - ema_ribbon_rsi_divergencias
+2026-01-15 20:45:10,171 - core.sistema_principal_futures - INFO - ✅ Cerebro BTC inicializado - ema_ribbon_rsi_divergencias
+2026-01-15 20:45:10,171 - cerebros.cerebro_base_futures - INFO - 🧠 Cerebro base inicializado para ETHUSDT
+2026-01-15 20:45:10,171 - cerebros.cerebro_eth_futures - INFO - 🧠 Cerebro ETH inicializado - macd_bollinger_obv
+2026-01-15 20:45:10,171 - core.sistema_principal_futures - INFO - ✅ Cerebro ETHUSDT inicializado - macd_bollinger_obv
+2026-01-15 20:45:10,171 - cerebros.cerebro_base_futures - INFO - 🧠 Cerebro base inicializado para SOLUSDT
+2026-01-15 20:45:10,171 - cerebros.cerebro_sol_futures - INFO - 🧠 Cerebro SOL inicializado - rsi_ajustado_emas_rapidas
+2026-01-15 20:45:10,171 - core.sistema_principal_futures - INFO - ✅ Cerebro SOLUSDT inicializado - rsi_ajustado_emas_rapidas
+2026-01-15 20:45:10,171 - cerebros.cerebro_base_futures - INFO - 🧠 Cerebro base inicializado para LINKUSDT
+2026-01-15 20:45:10,172 - cerebros.cerebro_link_futures - INFO - 🧠 Cerebro LINK inicializado - fibonacci_ichimoku_orderflow
+2026-01-15 20:45:10,172 - core.sistema_principal_futures - INFO - ✅ Cerebro LINKUSDT inicializado - fibonacci_ichimoku_orderflow
+2026-01-15 20:45:10,172 - cerebros.cerebro_base_futures - INFO - 🧠 Cerebro base inicializado para BNBUSDT
+2026-01-15 20:45:10,172 - cerebros.cerebro_bnb_futures - INFO - 🧠 Cerebro BNB inicializado - adx_volume_profile_correlation
+2026-01-15 20:45:10,172 - core.sistema_principal_futures - INFO - ✅ Cerebro BNB inicializado - adx_volume_profile_correlation
+2026-01-15 20:45:10,172 - core.sistema_principal_futures - INFO - 🎯 Total cerebros inicializados: 5/5
+2026-01-15 20:45:10,172 - core.sistema_principal_futures - INFO - ✅ Sistema inicializado correctamente
+✅ Sistema iniciado correctamente
+🔄 Ciclo de análisis en ejecución
+🛑 Presiona Ctrl+C para detener
+2026-01-15 20:45:10,172 - core.sistema_principal_futures - INFO - 🔄 Iniciando ciclo continuo de análisis
+2026-01-15 20:45:10,173 - core.sistema_principal_futures - INFO - 🔄 Ciclo #1 iniciado
+2026-01-15 20:45:10,173 - core.sistema_principal_futures - INFO - 🔄 Iniciando ciclo de análisis #1
+2026-01-15 20:45:10,173 - core.sistema_principal_futures - INFO - Ciclo cancelado por usuario

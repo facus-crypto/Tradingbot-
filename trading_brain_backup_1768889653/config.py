@@ -1,0 +1,121 @@
+"""
+CONFIGURACIÓN MAESTRA - Cerebro de Trading 5 Monedas
+Aquí definimos TODOS los parámetros para cada cerebro.
+"""
+
+# ==================== CAPITAL Y RIESGO ====================
+CAPITAL_CONFIG = {
+    "porcentaje_por_operacion": 0.25,  # 25% de la wallet por entrada
+    "apalancamiento": 2,               # Apalancamiento x2
+    "stop_loss_porcentaje": 0.02,      # 2% máximo por operación
+    "max_operaciones_simultaneas": 3   # Máximo 3 monedas operando a la vez
+}
+
+# ==================== MONEDAS Y TIMEFRAMES ====================
+# Configuración específica por moneda (según backtesting)
+MONEDAS = {
+    "BTCUSDT": {
+        "timeframe_analisis": "1d",
+        "timeframe_confirmacion": "1w",
+        "combinacion": "ema_ribbon_rsi",
+        "activo": "BTC",
+        "cerebro": "cerebro_btc"
+    },
+    "ETHUSDT": {
+        "timeframe_analisis": "4h",
+        "timeframe_confirmacion": "1d",
+        "combinacion": "macd_bollinger",
+        "activo": "ETH",
+        "cerebro": "cerebro_eth"
+    },
+    "SOLUSDT": {
+        "timeframe_analisis": "4h",
+        "timeframe_confirmacion": "1d",
+        "combinacion": "rsi_ajustado_emas",
+        "activo": "SOL",
+        "cerebro": "cerebro_sol"
+    },
+    "LINKUSDT": {
+        "timeframe_analisis": "1d",
+        "timeframe_confirmacion": "3d",
+        "combinacion": "fibonacci_ichimoku",
+        "activo": "LINK",
+        "cerebro": "cerebro_link"
+    },
+    "BNBUSDT": {
+        "timeframe_analisis": "1d",
+        "timeframe_confirmacion": "1w",
+        "combinacion": "adx_volume_profile",
+        "activo": "BNB",
+        "cerebro": "cerebro_bnb"
+    }
+}
+
+# ==================== PARÁMETROS POR COMBINACIÓN ====================
+# Parámetros específicos para cada tipo de estrategia
+PARAMETROS_STRATEGY = {
+    "ema_ribbon_rsi": {
+        "ema_periods": [9, 21, 55, 100],
+        "rsi_period": 14,
+        "rsi_sobrecompra": 70,
+        "rsi_sobreventa": 30,
+        "divergencia_lookback": 30
+    },
+    "macd_bollinger": {
+        "macd_fast": 12,
+        "macd_slow": 26,
+        "macd_signal": 9,
+        "bb_period": 20,
+        "bb_std": 2,
+        "squeeze_ratio": 0.7
+    },
+    "rsi_ajustado_emas": {
+        "rsi_period": 14,
+        "rsi_sobrecompra": 80,      # Ajustado para SOL
+        "rsi_sobreventa": 20,
+        "ema_fast": 9,
+        "ema_slow": 21
+    },
+    "fibonacci_ichimoku": {
+        "ichimoku_tenkan": 9,
+        "ichimoku_kijun": 26,
+        "ichimoku_senkou": 52,
+        "fibonacci_levels": [0.236, 0.382, 0.5, 0.618, 0.786]
+    },
+    "adx_volume_profile": {
+        "adx_period": 14,
+        "adx_umbral_fuerte": 25,
+        "vp_lookback_days": 30,
+        "correlacion_umbral": 0.7
+    }
+}
+
+# ==================== TELEGRAM ====================
+TELEGRAM_CONFIG = {
+    "bot_token": "TU_BOT_TOKEN",      # Reemplazar con tu token
+    "chat_id": "TU_CHAT_ID",          # Reemplazar con tu chat ID
+    "timeout_confirmacion": 60,       # 60 segundos para confirmar
+    "modo_prueba": True               # True para pruebas sin ejecutar
+}
+
+# ==================== BINANCE ====================
+BINANCE_CONFIG = {
+    "api_key": "uDLz2UjKBfY6Nhj9Q9paxpFMUmCQkmw71knczVmuelu9v80RwAvwCosOwwScHepL",          # Reemplazar con tu API Key
+    "api_secret": "cx7n5YHG8jDKY10tS1ejsj2wShnNdT3qvsaFClZPpbVIDQZFouxkB1llfzsY34y4",    # Reemplazar con tu Secret
+    "testnet": False,                 # True para usar Binance Testnet
+    "recv_window": 5000
+}
+
+# ==================== REGLAS GLOBALES ====================
+REGLAS_GLOBALES = {
+    "confluencia_minima": 2,          # Mínimo 2 confirmaciones para entrar
+    "max_perdidas_consecutivas": 3,   # Parar tras 3 pérdidas
+    "cooling_period": 48,             # Horas de espera tras racha mala
+    "horario_cierre_velas": "20:00"   # UTC para análisis diario
+}
+
+
+# Configuración para BNB
+TRADE_BNB = True
+SYMBOL_BNB = 'BNBUSDT'
+TIMEFRAME_BNB = '15m'

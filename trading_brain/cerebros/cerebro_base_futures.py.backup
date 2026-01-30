@@ -1,0 +1,255 @@
+import pandas as pd
+import numpy as np
+from typing import Dict, Optional
+import logging
+import time
+from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+class CerebroFuturesBase:
+    """Clase base para todos los cerebros de trading CON VALIDADOR."""
+    
+    def __init__(self, symbol: str, binance_manager=None, telegram_bot=None):
+        self.symbol = symbol
+        self.binance_manager = binance_manager
+        self.telegram_bot = telegram_bot
+        self.nombre_estrategia = "base"
+        self.timeframe = "1h"
+        self.validador = None
+        
+        # Inicializar validador si hay binance_manager
+        if self.binance_manager:
+            try:
+                from utilidades.validador_historico import ValidadorHistorico
+                self.validador = ValidadorHistorico(self.binance_manager)
+                logger.info(f"✅ Validador histórico activado para {symbol}")
+            except ImportError:
+                logger.warning(f"Validador histórico no disponible para {symbol}")
+        
+        logger.info(f"🧠 Cerebro {symbol} inicializado")
+    
+    def obtener_datos(self, timeframe: str, limite: int = 100) -> pd.DataFrame:
+        """Obtiene datos históricos REALES de Binance."""
+        try:
+            # Si no hay binance_manager, usar datos simulados
+            if not self.binance_manager:
+                logger.warning(f"{self.symbol}: Usando datos simulados")
+                return self._datos_simulados(timeframe, limite)
+            
+            # Mapear timeframe a formato Binance
+            tf_map = {
+                "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
+                "30m": "30m", "1h": "1h", "2h": "2h", "4h": "4h",
+                "6h": "6h", "8h": "8h", "12h": "12h", "1d": "1d"
+            }
+            
+            binance_tf = tf_map.get(timeframe, "1h")
+            
+            # Obtener datos de Binance
+            endpoint = "/fapi/v1/klines"
+            params = f"symbol={self.symbol}&interval={binance_tf}&limit={limite}"
+            
+            response = self.binance_manager._hacer_solicitud(endpoint, params)
+            
+            if not isinstance(response, list):
+                logger.error(f"{self.symbol}: Respuesta inválida de Binance")
+                return self._datos_simulados(timeframe, limite)
+            
+            # Convertir a DataFrame
+            datos = []
+            for vela in response:
+                datos.append({
+                    'timestamp': datetime.fromtimestamp(vela[0] / 1000),
+                    'open': float(vela[1]),
+                    'high': float(vela[2]),
+                    'low': float(vela[3]),
+                    'close': float(vela[4]),
+                    'volume': float(vela[5])
+                })
+            
+            df = pd.DataFrame(datos)
+            df.set_index('timestamp', inplace=True)
+            
+            logger.info(f"{self.symbol}: {len(df)} velas reales obtenidas ({timeframe})")
+            return df
+            
+        except Exception as e:
+            logger.error(f"{self.symbol}: Error obteniendo datos: {e}")
+            return self._datos_simulados(timeframe, limite)
+    
+    def _datos_simulados(self, timeframe: str, limite: int) -> pd.DataFrame:
+        """Datos simulados como fallback."""
+        # Crear fechas
+        if 'm' in timeframe:
+            freq = f"{timeframe.replace('m', '')}min"
+        elif 'h' in timeframe:
+            freq = f"{timeframe.replace('h', '')}h"
+        else:
+            freq = "1H"
+        
+        dates = pd.date_range(end=pd.Timestamp.now(), periods=limite, freq=freq)
+        
+        # Precios simulados
+        np.random.seed(hash(self.symbol) % 10000)
+        returns = np.random.normal(0.0001, 0.02, limite)
+        prices = 100 * (1 + returns).cumprod()
+        
+        df = pd.DataFrame({
+            'open': prices * 0.995,
+            'high': prices * 1.01,
+            'low': prices * 0.99,
+            'close': prices,
+            'volume': np.random.uniform(1000, 5000, limite)
+        }, index=dates)
+        
+        return df
+    
+    def validar_senal_con_historico(self, senal: Dict) -> Dict:
+        """Valida la señal con datos históricos antes de enviar."""
+        try:
+            if not self.validador or senal.get('direccion') == 'NEUTRAL':
+                # Si no hay validador o es señal neutral, devolver como válida
+                return {
+                    'valida': True,
+                    'confianza_combinada': senal.get('confianza', 0.0),
+                    'razon': 'Validación no aplicable'
+                }
+            
+            # Validar con histórico
+            resultado_val = self.validador.validar_senal(self.symbol, senal, dias_backtest=30)
+            
+            if resultado_val['valida']:
+                # Combinar confianzas: 70% del análisis actual + 30% del histórico
+                conf_analisis = senal.get('confianza', 0.0)
+                conf_historico = resultado_val.get('confianza_historica', 0.5)
+                confianza_combinada = (conf_analisis * 0.7) + (conf_historico * 0.3)
+                
+                # Actualizar la señal con información de validación
+                senal['validacion'] = resultado_val
+                senal['confianza_combinada'] = round(confianza_combinada, 2)
+                
+                logger.info(f"{self.symbol}: Señal VALIDADA (Análisis: {conf_analisis:.2f}, Histórico: {conf_historico:.2f}, Combinada: {confianza_combinada:.2f})")
+                
+                return {
+                    'valida': True,
+                    'confianza_combinada': confianza_combinada,
+                    'razon': resultado_val.get('razon', 'Validación exitosa'),
+                    'datos_validacion': resultado_val
+                }
+            else:
+                logger.warning(f"{self.symbol}: Señal RECHAZADA por validador: {resultado_val.get('razon', 'Sin razón')}")
+                return {
+                    'valida': False,
+                    'confianza_combinada': 0.0,
+                    'razon': resultado_val.get('razon', 'Señal no válida históricamente'),
+                    'datos_validacion': resultado_val
+                }
+                
+        except Exception as e:
+            logger.error(f"{self.symbol}: Error en validación: {e}")
+            return {
+                'valida': True,  # Por defecto válida si hay error
+                'confianza_combinada': senal.get('confianza', 0.0),
+                'razon': f'Error en validación: {str(e)[:50]}'
+            }
+    
+    def enviar_senal_con_validacion(self, senal: Dict, validacion: Dict = None) -> bool:
+    """Envía señal a Telegram con información de validación."""
+    try:
+        # Si no hay validación, crear una básica
+        if validacion is None:
+            validacion = {
+                'valida': True,
+                'confianza_combinada': senal.get('confianza', 0.0),
+                'datos_validacion': {'win_rate': 0}
+            }
+        
+        # Verificar si la señal es válida
+        if not validacion['valida']:
+            logger.info(f"{self.symbol}: Señal no válida, no enviada")
+            return False
+
+        # Actualizar confianza en la señal
+        senal['confianza'] = validacion['confianza_combinada']
+
+        # Agregar info de validación al comentario
+        if 'comentario' not in senal:
+            senal['comentario'] = ""
+        
+        win_rate = validacion.get('datos_validacion', {}).get('win_rate', 0) * 100
+        senal['comentario'] += f" ✅ Validado: WR {win_rate:.1f}%, Conf {senal['confianza']:.2f}"
+
+        # Enviar a Telegram
+        if self.telegram_bot:
+            signal_id = int(time.time()) % 1000000
+            side = "COMPRAR" if senal['direccion'] == "COMPRA" else "VENTA"
+            
+            return self.telegram_bot.send_signal(
+                signal_id=signal_id,
+                symbol=self.symbol,
+                side=side,
+                entry=senal.get('niveles', {}).get('entrada', 0),
+                sl=senal.get('niveles', {}).get('stop', 0),
+                tp=senal.get('niveles', {}).get('take', 0),
+                comment=senal.get('comentario', ""),
+                trailing_info=senal.get('trailing_info')
+            )
+
+        return False
+
+    except Exception as e:
+        logger.error(f"{self.symbol}: Error enviando señal: {str(e)[:50]}")
+        return False
+            
+            # Actualizar confianza en la señal
+            senal['confianza'] = validacion['confianza_combinada']
+            
+            # Agregar info de validación al comentario
+            if 'comentario' not in senal:
+                senal['comentario'] = ""
+            
+            win_rate = validacion.get('datos_validacion', {}).get('win_rate', 0)
+            senal['comentario'] += f" | ✅ Validado: WR {win_rate}%, Conf {validacion['confianza_combinada']:.2f}"
+            
+            # Enviar a Telegram
+            if self.telegram_bot:
+                signal_id = int(time.time() % 1000000)
+                side = "COMPRAR" if senal['direccion'] == "COMPRA" else "VENDER"
+                
+                return self.telegram_bot.send_signal(
+                    signal_id=signal_id,
+                    symbol=self.symbol,
+                    side=side,
+                    entry=senal.get('niveles', {}).get('entrada', senal.get('precio_actual', 0)),
+                    sl=senal.get('niveles', {}).get('stop_loss', 0),
+                    tp=senal.get('niveles', {}).get('take_profit', 0),
+                    comment=senal.get('comentario', ''),
+                    trailing_info=senal.get('trailing_info')
+                )
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"{self.symbol}: Error enviando señal: {e}")
+            return False
+    
+    def analizar(self) -> Optional[Dict]:
+        """Método base - debe ser sobrescrito por cada cerebro."""
+        return {
+            'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'par': self.symbol,
+            'direccion': 'NEUTRAL',
+            'confianza': 0.0,
+            'precio_actual': 0.0,
+            'indicadores': {},
+            'niveles': {}
+        }
+    
+    def enviar_senal_telegram(self, senal: Dict):
+        """Envía señal a Telegram si hay bot configurado."""
+        if self.telegram_bot:
+            mensaje = f"🔔 {self.symbol}\nDirección: {senal['direccion']}\nConfianza: {senal['confianza']}"
+            self.telegram_bot.enviar_mensaje(mensaje)
+            return True
+        return False

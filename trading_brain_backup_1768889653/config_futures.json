@@ -1,0 +1,85 @@
+{
+  "binance": {
+    "api_key": "cd ~/bot_trading/trading_brain && cat > correccion_final.py << 'EOF'",
+    "api_secret": "#!/usr/bin/env python3",
+    "testnet": false,
+    "leverage": 2,
+    "margin_type": "ISOLATED",
+    "position_percent": 0.25,
+    "risk_per_trade": 0.02
+  },
+  "telegram": {
+    "token": "8213565961:AAGQ5uVWSAVSNkklVERXLwxdLT-4iUuY8jg",
+    "chat_id": "213736357",
+    "notificar_se\u00f1ales": true,
+    "notificar_errores": true,
+    "notificar_cierre": true,
+    "botones_confirmacion": false,
+    "solo_notificaciones": true
+  },
+  "cerebros": {
+    "BTCUSDT": {
+      "activo": true,
+      "estrategia": "ema_ribbon_rsi",
+      "min_confidence": 0.75
+    },
+    "ETHUSDT": {
+      "activo": true,
+      "estrategia": "macd_bollinger",
+      "min_confidence": 0.7
+    },
+    "SOLUSDT": {
+      "activo": true,
+      "estrategia": "rsi_ajustado",
+      "min_confidence": 0.65
+    },
+    "LINKUSDT": {
+      "activo": true,
+      "estrategia": "fibonacci_ichimoku",
+      "min_confidence": 0.72
+    },
+    "BNBUSDT": {
+      "activo": true,
+      "estrategia": "adx_volume_profile",
+      "min_confidence": 0.68
+    },
+    "AVAXUSDT": {
+      "activo": true,
+      "estrategia": "ema_multiple_macd_hist",
+      "min_confidence": 0.7
+    },
+    "ADAUSDT": {
+      "activo": true,
+      "estrategia": "canal_tendencia_rsi_div",
+      "min_confidence": 0.68
+    },
+    "XRPUSDT": {
+      "activo": true,
+      "estrategia": "bandas_bollinger_squeeze",
+      "min_confidence": 0.7
+    },
+    "DOTUSDT": {
+      "activo": true,
+      "estrategia": "fibonacci_ema_volumen",
+      "min_confidence": 0.72
+    },
+    "ATOMUSDT": {
+      "activo": true,
+      "estrategia": "soporte_resistencia_adx",
+      "min_confidence": 0.75
+    }
+  },
+  "sistema": {
+    "intervalo_analisis": 300,
+    "max_posiciones_simultaneas": 3,
+    "stop_loss_diario": 0.05,
+    "modo_prueba": false,
+    "log_level": "INFO",
+    "modo": "se\u00f1ales_confirmacion_manual",
+    "ejecucion_automatica": false,
+    "notificar_se\u00f1ales": true,
+    "esperar_confirmacion": false,
+    "notificar_cierre": true,
+    "intervalo_analisis_minutos": 1
+  }
+}

@@ -1,0 +1,13 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/iniciar_sistema_futures.py", line 18, in main
+    from core.sistema_principal_futures import SistemaPrincipalFutures
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/core/sistema_principal_futures.py", line 32, in <module>
+    from cerebros.cerebro_eth_futures import CerebroETH
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/cerebros/cerebro_eth_futures.py", line 372
+    sl, tp, fase = self.calcular_trailing_directo(precio_actual, precio_actual)
+    ^^
+IndentationError: expected an indented block after 'if' statement on line 370
+🚀 Iniciando Sistema de Trading Futures...
+📁 Directorio: /data/data/com.termux/files/home/bot_trading/trading_brain
+❌ Error inesperado: expected an indented block after 'if' statement on line 370 (cerebro_eth_futures.py, line 372)

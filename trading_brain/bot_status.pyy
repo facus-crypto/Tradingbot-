@@ -1,0 +1,238 @@
+
+#!/usr/bin/env python3
+"""
+Bot de Telegram para comando /status - VERSIÓN FINAL
+"""
+import json
+import logging
+from datetime import datetime
+import requests
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Cargar configuración
+with open('config_futures.json', 'r') as f:
+    config = json.load(f)
+
+TOKEN = config['telegram']['token']
+CHAT_ID = config['telegram']['chat_id']
+
+def obtener_precio(par):
+    """Obtiene precio desde Binance API"""
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={par}"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            return float(data['price'])
+        return None
+    except:
+        return None
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /start"""
+    await update.message.reply_text(
+        "🤖 *Bot de Trading - Sistema Completo*\n\n"
+        "*Comandos disponibles:*\n"
+        "• /start - Iniciar bot\n"
+        "• /status - Estado completo del sistema\n"
+        "• /help - Ayuda detallada\n\n"
+        "*Funcionalidades:*\n"
+        "• Monitoreo de 10 pares en tiempo real\n"
+        "• Análisis técnico avanzado\n"
+        "• Señales validadas históricamente\n"
+        "• Notificaciones instantáneas\n\n"
+        "📈 *Pares monitoreados:*\n"
+        "BTC, ETH, SOL, LINK, BNB, ADA, AVAX, XRP, DOT, ATOM",
+        parse_mode='Markdown'
+    )
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /help"""
+    await update.message.reply_text(
+        "📋 *Comandos disponibles:*\n"
+        "• /status - Muestra estado completo del sistema\n"
+        "• /help - Muestra esta ayuda\n\n"
+        "*Funcionalidades:*\n"
+        "• Monitoreo de 10 pares en tiempo real\n"
+        "• Precios actualizados\n"
+        "• Estadísticas del sistema\n"
+        "• Configuración de riesgo\n\n"
+        "📊 *Pares analizados:*\n"
+        "BTC, ETH, SOL, LINK, BNB, ADA, AVAX, XRP, DOT, ATOM",
+        parse_mode='Markdown'
+    )
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /status - VERSIÓN COMPLETA"""
+    try:
+        # Cargar estadísticas
+        try:
+            with open('stats.json', 'r') as f:
+                stats = json.load(f)
+        except:
+            stats = {
+                "inicio_sistema": datetime.now().isoformat(),
+                "señales_enviadas": 0,
+                "ciclos_completados": 0,
+                "operaciones_activas": 0,
+                "ultimo_ciclo": datetime.now().isoformat()
+            }
+        
+        # Calcular tiempo activo
+        inicio = datetime.fromisoformat(stats["inicio_sistema"])
+        ahora = datetime.now()
+        tiempo_activo = ahora - inicio
+        horas = tiempo_activo.seconds // 3600
+        minutos = (tiempo_activo.seconds % 3600) // 60
+        
+        # Pares a monitorear
+        pares = [
+            "BTCUSDT", "ETHUSDT", "SOLUSDT", "LINKUSDT", 
+            "BNBUSDT", "ADAUSDT", "AVAXUSDT", "XRPUSDT", 
+            "DOTUSDT", "ATOMUSDT"
+        ]
+    
+        # Construir mensaje
+        async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /status - FORMATO LIMPIO SIN EMOJIS"""
+    try:
+        # Cargar estadísticas
+        try:
+            with open('stats.json', 'r') as f:
+                stats = json.load(f)
+        except:
+            stats = {
+                "inicio_sistema": datetime.now().isoformat(),
+                "señales_enviadas": 0,
+                "ciclos_completados": 0,
+                "operaciones_activas": 0,
+                "ultimo_ciclo": datetime.now().isoformat()
+            }
+
+        # Calcular tiempo activo
+        inicio = datetime.fromisoformat(stats["inicio_sistema"])
+        ahora = datetime.now()
+        tiempo_activo = ahora - inicio
+        horas = tiempo_activo.seconds // 3600
+        minutos = (tiempo_activo.seconds % 3600) // 60
+
+        # Pares a monitorear (sin emojis)
+        pares = [
+            ("BTC", "BTCUSDT"),
+            ("ETH", "ETHUSDT"),
+            ("SOL", "SOLUSDT"),
+            ("LINK", "LINKUSDT"),
+            ("BNB", "BNBUSDT"),
+            ("ADA", "ADAUSDT"),
+            ("AVAX", "AVAXUSDT"),
+            ("XRP", "XRPUSDT"),
+            ("DOT", "DOTUSDT"),
+            ("ATOM", "ATOMUSDT")
+        ]
+
+        # Construir mensaje con nuevo formato limpio
+        status_msg = "✅ *SISTEMA OPERATIVO*\n"
+        status_msg += "🕐 Hora: {}\n\n".format(ahora.strftime('%H:%M:%S'))
+        status_msg += "📊 *ESTADÍSTICAS DEL SISTEMA:*\n"
+        status_msg += "• Tiempo activo: {}h {}m\n".format(horas, minutos)
+        status_msg += "• Ciclos completados: {}\n".format(stats['ciclos_completados'])
+        status_msg += "• Señales enviadas: {}\n".format(stats['señales_enviadas'])
+        status_msg += "• Operaciones activas: {}\n".format(stats['operaciones_activas'])
+        status_msg += "• Último ciclo: {}\n".format(stats['ultimo_ciclo'][11:19])
+        
+        # Verificar estado PM2
+        import subprocess
+        result = subprocess.run(['pm2', 'status', 'trading_bot'], 
+                              capture_output=True, text=True)
+        estado = "EJECUTANDO" if 'online' in result.stdout else "DETENIDO"
+        status_msg += "• Estado actual: {}\n".format(estado)
+        status_msg += "----------------------------------------------------\n"
+        status_msg += "📈 *PRECIOS ACTUALES:*\n"
+
+        # Obtener precios y formar dos columnas
+        precios_col1 = []  # Columna izquierda (primeros 5: BTC, ETH, SOL, LINK, BNB)
+        precios_col2 = []  # Columna derecha (últimos 5: ADA, AVAX, XRP, DOT, ATOM)
+        
+        for i, (nombre, par) in enumerate(pares):
+            try:
+                precio = obtener_precio(par)
+                if precio is None:
+                    precio_str = "Error"
+                else:
+                    # Formatear precio según su valor (igual que antes)
+                    if precio > 1000:
+                        # Para BTC, ETH: quitar decimales .00
+                        precio_str = f"${precio:,.0f}"
+                        if precio_str.endswith('.00'):
+                            precio_str = precio_str[:-3]
+                    elif precio > 10:
+                        # Para BNB, SOL: 2 decimales
+                        precio_str = f"${precio:,.2f}"
+                    else:
+                        # Para los pequeños: 4 decimales
+                        precio_str = f"${precio:.4f}"
+                
+                linea = f"• {nombre}: {precio_str}"
+                
+                # Dividir en dos columnas
+                if i < 5:
+                    precios_col1.append(linea)
+                else:
+                    precios_col2.append(linea)
+                    
+            except Exception as e:
+                linea = f"• {nombre}: Error"
+                if i < 5:
+                    precios_col1.append(linea)
+                else:
+                    precios_col2.append(linea)
+
+        # Unir las dos columnas con alineación
+        for j in range(5):
+            # Añadir espacios a la columna izquierda para alineación
+            col1 = precios_col1[j].ljust(25) if j < len(precios_col1) else ""
+            col2 = precios_col2[j] if j < len(precios_col2) else ""
+            status_msg += f"{col1} | {col2}\n"
+
+        status_msg += "--------------------------------------------------------\n"
+        status_msg += "⚙️ *CONFIGURACIÓN:*\n"
+        status_msg += "• Leverage: 3X Aislado\n"
+        status_msg += "• Capital por trade: 25%\n"
+        status_msg += "• Riesgo por trade: 2% máximo\n"
+        status_msg += "• Stop Loss diario: 1%\n"
+        status_msg += "----------------------------------------------------\n"
+        status_msg += "🔔 *SISTEMA OPERATIVO*\n"
+        status_msg += "• Analizando mercado en tiempo real\n"
+        status_msg += "• Las señales llegarán automáticamente"
+
+        await update.message.reply_text(status_msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        logger.error(f"Error en status_command: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)[:50]}")
+        await update.message.reply_text(f"❌ Error: {str(e)[:50]}")
+
+def main():
+    """Inicia el bot de Telegram"""
+    print("🤖 Iniciando bot de estado de Telegram...")
+    print(f"Token: {TOKEN[:10]}...")
+    
+    app = Application.builder().token(TOKEN).build()
+    
+    # Comandos
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("help", help_command))
+    
+    print("✅ Bot listo. Esperando comandos...")
+    app.run_polling(
+    allowed_updates=Update.ALL_TYPES,
+    drop_pending_updates=True  # <-- IGNORA MENSAJES ANTIGUOS
+)
+
+if __name__ == "__main__":
+    main()

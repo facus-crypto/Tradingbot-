@@ -1,0 +1,258 @@
+"""
+CEREBRO PRINCIPAL CON TELEGRAM - Sistema completo integrado
+Conecta: Cerebros → Telegram → Confirmación → Risk Manager
+"""
+import asyncio
+import logging
+from datetime import datetime
+from typing import Dict, List, Optional
+import sys
+import os
+
+# Agregar paths
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cerebros'))
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'interfaces'))
+
+# Importar componentes
+try:
+    from config import MONEDAS, CAPITAL_CONFIG
+    CONFIG_CARGADA = True
+except ImportError:
+    CONFIG_CARGADA = False
+    MONEDAS = {}
+    CAPITAL_CONFIG = {"max_operaciones_simultaneas": 3}
+
+# Cerebros especializados
+cerebros_cargados = {}
+try:
+    from cerebros.cerebro_btc import CerebroBTC
+    cerebros_cargados["BTCUSDT"] = CerebroBTC
+except ImportError as e:
+    print(f"⚠️  No CerebroBTC: {e}")
+
+try:
+    from cerebros.cerebro_eth import CerebroETH
+    cerebros_cargados["ETHUSDT"] = CerebroETH
+except ImportError as e:
+    print(f"⚠️  No CerebroETH: {e}")
+
+try:
+    from cerebros.cerebro_sol import CerebroSOL
+    cerebros_cargados["SOLUSDT"] = CerebroSOL
+except ImportError as e:
+    print(f"⚠️  No CerebroSOL: {e}")
+
+try:
+    from cerebros.cerebro_link import CerebroLINK
+    cerebros_cargados["LINKUSDT"] = CerebroLINK
+except ImportError as e:
+    print(f"⚠️  No CerebroLINK: {e}")
+    # CEREBRO BNB
+    try:
+        from cerebros.cerebro_bnb import CerebroBNB
+        cerebros_cargados["BNBUSDT"] = CerebroBNB
+        print(f"✅ BNBUSDT añadido a cerebros_cargados")
+    except ImportError as e:
+        print(f"⚠️ No CerebroBNB: {e}")
+    from telegram_signal import InterfazTelegramSimple
+    TELEGRAM_DISPONIBLE = True
+except ImportError as e:
+    print(f"⚠️  No InterfazTelegram: {e}")
+    TELEGRAM_DISPONIBLE = False
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+
+class SistemaCompleto:
+    """Sistema completo de trading integrado"""
+    
+    def __init__(self, usar_telegram=True):
+        self.cerebros_especializados = {}
+        self.interfaz_telegram = None
+        self.senales_enviadas = 0
+        self.senales_confirmadas = 0
+        self.estado = "INICIANDO"
+        
+        # Inicializar cerebros
+        self.inicializar_cerebros()
+        
+        # Inicializar Telegram si está disponible
+        if usar_telegram and TELEGRAM_DISPONIBLE:
+            self.interfaz_telegram = InterfazTelegramSimple(modo_prueba=True)
+            logger.info("📱 Interfaz Telegram integrada al sistema")
+        
+        logger.info(f"🚀 SISTEMA COMPLETO INICIADO ({len(self.cerebros_especializados)} cerebros)")
+    
+    def inicializar_cerebros(self):
+        """Inicializa todos los cerebros especializados"""
+        logger.info("Inicializando cerebros...")
+        
+        for simbolo, CerebroClass in cerebros_cargados.items():
+            try:
+                cerebro = CerebroClass()
+                self.cerebros_especializados[simbolo] = cerebro
+                # Obtener nombre de estrategia
+                estrategia = "N/A"
+                if CONFIG_CARGADA and simbolo in MONEDAS:
+                    estrategia = MONEDAS[simbolo].get("combinacion", "N/A")
+                
+                logger.info(f"  ✅ {simbolo}: {estrategia}")
+                
+            except Exception as e:
+                logger.error(f"  ❌ Error {simbolo}: {e}")
+    
+    async def ciclo_completo(self, ciclos=3, intervalo_segundos=30):
+        """Ciclo completo del sistema"""
+        logger.info(f"🔄 INICIANDO CICLO COMPLETO ({ciclos} ciclos)")
+        
+        for ciclo in range(1, ciclos + 1):
+            try:
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🌀 CICLO {ciclo}/{ciclos}")
+                logger.info(f"{'='*60}")
+                
+                # 1. Análisis con todos los cerebros
+                senales = await self.analizar_todas_monedas()
+                
+                # 2. Procesar señales encontradas
+                if senales:
+                    await self.procesar_senales(senales)
+                else:
+                    logger.info("📭 No se encontraron señales en este ciclo")
+                
+                # 3. Mostrar estado
+                self.mostrar_estado_sistema(ciclo)
+                
+                # 4. Esperar para próximo ciclo
+                if ciclo < ciclos:
+                    logger.info(f"\n⏳ Esperando {intervalo_segundos} segundos...")
+                    await asyncio.sleep(intervalo_segundos)
+                
+            except Exception as e:
+                logger.error(f"Error en ciclo {ciclo}: {e}")
+                await asyncio.sleep(10)
+        
+        # Resumen final
+        self.mostrar_resumen_final()
+    
+    async def analizar_todas_monedas(self) -> List[Dict]:
+        """Analiza todas las monedas en paralelo"""
+        senales = []
+        tasks = []
+        
+        # Crear tareas para análisis paralelo
+        for simbolo, cerebro in self.cerebros_especializados.items():
+            task = asyncio.create_task(self.analizar_moneda(simbolo, cerebro))
+            tasks.append(task)
+        
+        # Esperar resultados
+        if tasks:
+            resultados = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            for i, resultado in enumerate(resultados):
+                simbolo = list(self.cerebros_especializados.keys())[i]
+                if isinstance(resultado, Exception):
+                    logger.error(f"Error {simbolo}: {resultado}")
+                elif resultado:
+                    senales.append(resultado)
+                    logger.info(f"  📡 {simbolo}: Señal detectada (Fuerza: {resultado.get('fuerza', 0)}/10)")
+                else:
+                    logger.debug(f"  📡 {simbolo}: Sin señal")
+        
+        return senales
+    
+    async def analizar_moneda(self, simbolo: str, cerebro) -> Optional[Dict]:
+        """Analiza una moneda específica"""
+        try:
+            if hasattr(cerebro, 'analizar'):
+                return await cerebro.analizar()
+        except Exception as e:
+            logger.error(f"Error analizando {simbolo}: {e}")
+        return None
+    
+    async def procesar_senales(self, senales: List[Dict]):
+        """Procesa señales encontradas"""
+        logger.info(f"\n📊 PROCESANDO {len(senales)} SEÑAL(ES)")
+        
+        for senal in senales:
+            # Filtrar por fuerza mínima
+            if senal.get('fuerza', 0) < 6:
+                logger.info(f"  ⚠️  {senal.get('simbolo')}: Fuerza insuficiente ({senal.get('fuerza')}/10)")
+                continue
+            
+            # Enviar a Telegram si está disponible
+            if self.interfaz_telegram:
+                try:
+                    enviado = await self.interfaz_telegram.enviar_senal(senal)
+                    if enviado:
+                        self.senales_enviadas += 1
+                        logger.info(f"  📤 {senal.get('simbolo')}: Enviada a Telegram")
+                    else:
+                        logger.warning(f"  ❌ {senal.get('simbolo')}: Error enviando a Telegram")
+                except Exception as e:
+                    logger.error(f"  💥 {senal.get('simbolo')}: Error Telegram: {e}")
+            else:
+                # Mostrar señal directamente
+                logger.info(f"  🔔 {senal.get('simbolo')}: {senal.get('direccion')} "
+                          f"a ${senal.get('precio_entrada', 0):.2f}")
+                logger.info(f"     Razones: {', '.join(senal.get('razones', [])[:2])}")
+    
+    def mostrar_estado_sistema(self, ciclo: int):
+        """Muestra estado del sistema"""
+        logger.info(f"\n📈 ESTADO DEL SISTEMA (Ciclo {ciclo}):")
+        logger.info(f"  • Cerebros activos: {len(self.cerebros_especializados)}")
+        logger.info(f"  • Señales enviadas: {self.senales_enviadas}")
+        logger.info(f"  • Telegram: {'✅ CONECTADO' if self.interfaz_telegram else '❌ NO DISPONIBLE'}")
+        
+        if self.interfaz_telegram:
+            estado_tg = self.interfaz_telegram.get_estado()
+            logger.info(f"  • Señales pendientes Telegram: {estado_tg.get('senales_pendientes', 0)}")
+    
+    def mostrar_resumen_final(self):
+        """Muestra resumen final"""
+        logger.info(f"\n{'⭐'*20} RESUMEN FINAL {'⭐'*20}")
+        logger.info(f"  • Total ciclos completados: ✓")
+        logger.info(f"  • Cerebros operativos: {len(self.cerebros_especializados)}")
+        logger.info(f"  • Señales detectadas totales: {self.senales_enviadas}")
+        logger.info(f"  • Sistema integrado: ✅ COMPLETO")
+        logger.info(f"\n🎯 SISTEMA LISTO PARA OPERAR:")
+        logger.info(f"  1. Cerebros especializados → Analizan mercado")
+        logger.info(f"  2. Filtran señales (fuerza ≥ 6/10)")
+        logger.info(f"  3. Envían a Telegram (simulación)")
+        logger.info(f"  4. Esperan confirmación manual")
+        logger.info(f"  5. Risk Manager calcula posición (25% wallet, x2)")
+        logger.info(f"\n⚠️  PARA PRODUCCIÓN:")
+        logger.info(f"  • Configurar Token y Chat ID real en telegram_signal.py")
+        logger.info(f"  • Configurar API Keys de Binance en config.py")
+        logger.info(f"  • Cambiar modo_prueba=False")
+        logger.info(f"{'✅'*20} FINALIZADO {'✅'*20}")
+
+# Función principal
+async def main():
+    """Función principal"""
+    print("\n" + "="*70)
+    print("🚀 SISTEMA DE TRADING INSTITUCIONAL - PRUEBA COMPLETA")
+    print("="*70)
+    
+    # Crear sistema completo
+    sistema = SistemaCompleto(usar_telegram=True)
+    
+    try:
+        # Ejecutar ciclo completo
+        await sistema.ciclo_completo(ciclos=2, intervalo_segundos=15)
+    except KeyboardInterrupt:
+        print("\n🛑 Sistema detenido por usuario")
+    except Exception as e:
+        print(f"\n💥 Error en sistema: {e}")
+    finally:
+        print("\n👋 Ejecución finalizada")
+
+# Punto de entrada
+if __name__ == "__main__":
+    asyncio.run(main())

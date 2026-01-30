@@ -1,0 +1,72 @@
+{
+  "cerebros": {
+    "BTCUSDT": { 
+      "activo": true, 
+      "estrategia": "ema_ribbon_rsi",
+      "clase": "CerebroBTCFutures",
+      "timeframe": "1h"
+    },
+    "ETHUSDT": { 
+      "activo": true, 
+      "estrategia": "macd_bollinger_obv",
+      "clase": "CerebroETHFutures", 
+      "timeframe": "15m"
+    },
+    "SOLUSDT": { 
+      "activo": true, 
+      "estrategia": "rsi_ajustado_emas_rapidas",
+      "clase": "CerebroSOLFutures",
+      "timeframe": "15m"
+    },
+    "LINKUSDT": { 
+      "activo": true, 
+      "estrategia": "fibonacci_ichimoku_orderflow",
+      "clase": "CerebroLINKFutures",
+      "timeframe": "4h"
+    },
+    "BNBUSDT": { 
+      "activo": true, 
+      "estrategia": "adx_volume_profile_correlation",
+      "clase": "CerebroBNBFutures",
+      "timeframe": "1h"
+    },
+    "ADAUSDT": { 
+      "activo": true, 
+      "estrategia": "canal_tendencia_rsi_div",
+      "clase": "CerebroADAFutures",
+      "timeframe": "15m"
+    },
+    "AVAXUSDT": { 
+      "activo": true, 
+      "estrategia": "ema_multiple_macd_hist",
+      "clase": "CerebroAVAXFutures",
+      "timeframe": "1h"
+    },
+    "XRPUSDT": { 
+      "activo": true, 
+      "estrategia": "bandas_bollinger_squeeze",
+      "clase": "CerebroXRPFutures",
+      "timeframe": "15m"
+    },
+    "DOTUSDT": { 
+      "activo": true, 
+      "estrategia": "fibonacci_ema_volumen",
+      "clase": "CerebroDOTFutures",
+      "timeframe": "4h"
+    },
+    "ATOMUSDT": { 
+      "activo": true, 
+      "estrategia": "soporte_resistencia_adx",
+      "clase": "CerebroATOMFutures",
+      "timeframe": "1h"
+    }
+  },
+  "binance": {
+    "api_key": "TU_API_KEY",
+    "api_secret": "TU_API_SECRET"
+  },
+  "telegram": {
+    "token": "TU_BOT_TOKEN",
+    "chat_id": "213736357"
+  }
+}

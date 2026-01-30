@@ -1,0 +1,24 @@
+{
+  "fecha_configuracion": "2026-01-14T19:23:19.696874",
+  "pasos_completados": [
+    "Estructura verificada",
+    "Binance API configurada",
+    "Telegram Bot configurado",
+    "Gesti\u00f3n de riesgo establecida",
+    "Protocolos de seguridad activados",
+    "Pruebas realizadas",
+    "Sistema listo para producci\u00f3n"
+  ],
+  "comandos_importantes": {
+    "iniciar_sistema": "python3 core/cerebro_principal_con_telegram.py",
+    "ver_logs": "tail -f trading.log",
+    "detener_sistema": "pkill -f cerebro_principal_con_telegram",
+    "prueba_telegram": "python3 interfaces/telegram_signal.py",
+    "prueba_risk": "python3 core/risk_manager.py"
+  },
+  "contactos_emergencia": {
+    "detener_todo": "Detener script y cerrar posiciones manualmente en Binance",
+    "soporte": "Revisar logs en trading.log",
+    "backup": "Configuraci\u00f3n guardada en config.py"
+  }
+}

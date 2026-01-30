@@ -1,0 +1,47 @@
+import pandas as pd
+import numpy as np
+from typing import Dict, Optional
+from .cerebro_base_futures import CerebroFuturesBase
+import logging
+
+logger = logging.getLogger(__name__)
+
+class CerebroBTCFutures(CerebroFuturesBase):
+    """Cerebro para TEMPLATE."""
+    
+    def __init__(self, binance_manager=None, telegram_bot=None):
+        super().__init__("BTCUSDT", binance_manager, telegram_bot)
+        self.nombre_estrategia = "ema_ribbon_rsi"
+        self.timeframe = "1h"
+        logger.info(f"✅ Cerebro TEMPLATE inicializado - {self.nombre_estrategia}")
+    
+    def analizar(self) -> Optional[Dict]:
+        """Análisis principal - IMPLEMENTAR ESTRATEGIA ESPECÍFICA AQUÍ."""
+        try:
+            datos = self.obtener_datos(self.timeframe, limite=100)
+            if datos.empty:
+                return None
+            
+            precio_actual = datos['close'].iloc[-1]
+            
+            # LÓGICA DE ESTRATEGIA VA AQUÍ
+            # ...
+            
+            # Por defecto: neutral
+            return {
+                'timestamp': datos.index[-1].strftime('%Y-%m-%d %H:%M:%S'),
+                'par': self.symbol,
+                'direccion': 'NEUTRAL',
+                'confianza': 0.3,
+                'precio_actual': float(precio_actual),
+                'indicadores': {'estado': 'pendiente_implementacion'},
+                'niveles': {
+                    'entrada': float(precio_actual),
+                    'stop_loss': float(precio_actual * 0.98),
+                    'take_profit': float(precio_actual * 1.02)
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analizando {self.symbol}: {e}")
+            return None

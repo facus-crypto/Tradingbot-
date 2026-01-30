@@ -1,0 +1,9 @@
+{
+  "cerebros": {
+    "AVAXUSDT": { 
+      "activo": true, 
+      "estrategia": "ema_multiple_macd_hist",
+      "clase": "CerebroAVAXFutures"
+    }
+  }
+}

@@ -1,0 +1,157 @@
+import pandas as pd
+import numpy as np
+from .cerebro_base_futures import CerebroFuturesBase
+
+class CerebroXRPFutures(CerebroFuturesBase):
+    """Cerebro para XRP - Estrategia Bandas Bollinger Squeeze"""
+    
+    def __init__(self, symbol="XRPUSDT", binance_manager=None, telegram_bot=None):
+        super().__init__(
+            symbol=symbol,
+            binance_manager=binance_manager,
+            telegram_bot=telegram_bot
+        )
+        self.estrategia = "bandas_bollinger_squeeze"
+        self.nombre = "XRP_Bandas_Bollinger_Squeeze"
+        self.timeframe = "15m"
+        print(f"✅ [XRP] Cerebro inicializado - Estrategia: {self.estrategia}")
+    
+    def calcular_indicadores(self, df):
+        if len(df) < 50:
+            return df
+            
+        # Bandas Bollinger (20, 2)
+        df['BB_middle'] = df['close'].rolling(window=20).mean()
+        df['BB_std'] = df['close'].rolling(window=20).std()
+        df['BB_upper'] = df['BB_middle'] + 2 * df['BB_std']
+        df['BB_lower'] = df['BB_middle'] - 2 * df['BB_std']
+        
+        # Ancho de bandas (squeeze indicator)
+        df['BB_width'] = (df['BB_upper'] - df['BB_lower']) / df['BB_middle']
+        
+        # RSI para confirmación (14 periodos)
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # Volumen promedio para confirmación
+        df['volume_sma'] = df['volume'].rolling(window=20).mean()
+        df['volume_ratio'] = df['volume'] / df['volume_sma']
+        
+        # Momentum para dirección
+        df['momentum'] = df['close'] - df['close'].shift(10)
+        
+        return df
+    
+    def generar_senal(self, df):
+        if len(df) < 50:
+            return 0, 0, 0, 0, "Insuficientes datos"
+        
+        ultimo = df.iloc[-1]
+        penultimo = df.iloc[-2]
+        
+        # Detectar squeeze (bandas muy estrechas - menos del 5%)
+        squeeze_actual = ultimo['BB_width'] < 0.05
+        squeeze_anterior = penultimo['BB_width'] < 0.05
+        
+        # Breakout con volumen y RSI
+        volumen_alto = ultimo['volume_ratio'] > 1.5
+        rsi_neutral = 30 < ultimo['RSI'] < 70
+        
+        # Señal de COMPRA: breakout alcista después de squeeze
+        if squeeze_anterior and not squeeze_actual and volumen_alto:
+            if ultimo['close'] > ultimo['BB_middle'] and ultimo['RSI'] > 50:
+                if ultimo['momentum'] > 0:  # Momentum positivo
+                    stop_loss = min(ultimo['BB_lower'], df['low'].iloc[-10:].min())
+                    take_profit = ultimo['BB_upper'] + (ultimo['BB_upper'] - ultimo['BB_middle'])
+                    confianza = min(0.85, 0.6 + (ultimo['volume_ratio'] * 0.1))
+                    return 1, confianza, f"LONG: Breakout BB Squeeze | RSI: {ultimo['RSI']:.1f} | Vol: {ultimo['volume_ratio']:.1f}x"
+        
+        # Señal de VENTA: breakout bajista después de squeeze
+        if squeeze_anterior and not squeeze_actual and volumen_alto:
+            if ultimo['close'] < ultimo['BB_middle'] and ultimo['RSI'] < 50:
+                if ultimo['momentum'] < 0:  # Momentum negativo
+                    stop_loss = max(ultimo['BB_upper'], df['high'].iloc[-10:].max())
+                    take_profit = ultimo['BB_lower'] - (ultimo['BB_middle'] - ultimo['BB_lower'])
+                    confianza = min(0.85, 0.6 + (ultimo['volume_ratio'] * 0.1))
+                    return -1, confianza, f"SHORT: Breakdown BB Squeeze | RSI: {ultimo['RSI']:.1f} | Vol: {ultimo['volume_ratio']:.1f}x"
+        
+        # Trading range (sin squeeze claro)
+        if 0.05 <= ultimo['BB_width'] <= 0.15 and rsi_neutral:
+            # Compra en soporte de banda inferior
+            if ultimo['close'] <= ultimo['BB_lower'] * 1.01 and ultimo['RSI'] < 40:
+                # Calcular SL/TP con trailing
+                precio_actual = ultimo["close"]
+                sl, tp, fase = self.calcular_sl_tp_trailing(precio_actual, precio_actual)
+                return 1, 0.65, sl, tp, f"LONG[{fase}]: Soporte BB inferior | RSI: {ultimo['RSI']:.1f}"
+            
+            # Venta en resistencia de banda superior
+            if ultimo['close'] >= ultimo['BB_upper'] * 0.99 and ultimo['RSI'] > 60:
+                # Calcular SL/TP con trailing
+                precio_actual = ultimo["close"]
+                sl, tp, fase = self.calcular_sl_tp_trailing(precio_actual, precio_actual)
+                return -1, 0.65, sl, tp, f"SHORT[{fase}]: Resistencia BB superior | RSI: {ultimo['RSI']:.1f}"
+        
+        return 0, 0, 0, 0, "Esperando señal clara"
+
+    def calcular_sl_tp_trailing(self, precio_entrada, precio_actual, ganancia_actual=None):
+        """
+        Calcula trailing stop para XRP/USDT con tres fases CORREGIDO
+        
+        Fases:
+        1. INICIAL: Ganancia <= 1%
+           - SL: 2% bajo entrada
+           - TP: 3% sobre entrada
+           
+        2. TRAILING: Ganancia entre 1% y 7% (excluyendo ambos extremos)
+           - SL: 0.5% bajo precio actual  
+           - TP: 2% sobre precio actual
+           
+        3. BLOQUEO: Ganancia >= 7%
+           - SL: 0.25% bajo precio actual
+           - TP: 1% sobre precio actual
+           
+        Args:
+            precio_entrada (float): Precio de entrada
+            precio_actual (float): Precio actual del mercado
+            ganancia_actual (float, optional): Ganancia actual en decimal
+            
+        Returns:
+            tuple: (sl_price, tp_price, fase_name)
+        """
+        # Calcular ganancia si no se proporciona
+        if ganancia_actual is None:
+            ganancia_actual = (precio_actual - precio_entrada) / precio_entrada
+        
+        # Umbrales de fase
+        UMBRAL_INICIAL = 0.01      # 1%
+        UMBRAL_BLOQUEO = 0.07      # 7%
+        
+        # FASE 1: INICIAL (ganancia <= 1%)
+        if ganancia_actual <= UMBRAL_INICIAL:
+            fase = "INICIAL"
+            sl = precio_entrada * (1 - 0.02)  # -2%
+            tp = precio_entrada * (1 + 0.03)  # +3%
+        
+        # FASE 2: TRAILING (ganancia entre 1% y 7%)  
+        elif ganancia_actual < UMBRAL_BLOQUEO:
+            fase = "TRAILING"
+            sl = precio_actual * (1 - 0.005)  # -0.5%
+            tp = precio_actual * (1 + 0.02)   # +2%
+        
+        # FASE 3: BLOQUEO (ganancia >= 7%)
+        else:
+            fase = "BLOQUEO"
+            sl = precio_actual * (1 - 0.0025)  # -0.25%
+            tp = precio_actual * (1 + 0.01)    # +1%
+        
+        return sl, tp, fase
+
+    def calcular_trailing_directo(self, precio_entrada, precio_actual, ganancia_actual=None):
+        """
+        Calcula trailing stop directo (alias de calcular_sl_tp_trailing)
+        Para compatibilidad con pruebas existentes
+        """
+        return self.calcular_sl_tp_trailing(precio_entrada, precio_actual, ganancia_actual)

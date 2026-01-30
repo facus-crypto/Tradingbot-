@@ -1,0 +1,147 @@
+"""
+CEREBRO SOL - RSI Ajustado + EMAs Rápidas
+Estrategia para Solana (timeframe 15m)
+"""
+import logging
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+import requests
+import ta
+
+from config import MONEDAS, PARAMETROS_STRATEGY
+from cerebros.cerebro_base_futures import CerebroFuturesBase
+
+logger = logging.getLogger(__name__)
+
+class CerebroSOL(CerebroFuturesBase):
+    """Cerebro especializado para Solana"""
+
+    def __init__(self, binance_manager=None, telegram_bot=None):
+        super().__init__("SOLUSDT", binance_manager, telegram_bot)
+        self.simbolo = "SOLUSDT"
+        self.config = MONEDAS.get(self.simbolo, {})
+        self.parametros = PARAMETROS_STRATEGY.get("rsi_emas_rapidas", {})
+        
+        # Estado interno
+        self.ultimo_analisis = None
+        self.estado = "INICIADO"
+        self.senal_actual = None
+        
+        logger.info(f"🧠 CEREBRO SOL INICIADO - Estrategia: RSI Ajustado + EMAs Rápidas")
+    
+    def obtener_datos_binance(self, intervalo: str, limite: int = 200) -> Optional[pd.DataFrame]:
+        """Obtiene datos históricos de Binance"""
+        try:
+            url = "https://api.binance.com/api/v3/klines"
+            params = {
+                "symbol": self.simbolo,
+                "interval": intervalo,
+                "limit": limite
+            }
+
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            datos = response.json()
+
+            # Convertir a DataFrame
+            columnas = [
+                'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+                'taker_buy_quote', 'ignore'
+            ]
+
+            df = pd.DataFrame(datos, columns=columnas)
+
+            # Convertir tipos numéricos
+            numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+            df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
+
+            # Convertir timestamp
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Error obteniendo datos de Binance: {e}")
+            return None
+    def calcular_rsi_ajustado(self, df: pd.DataFrame) -> Dict:
+        """Calcula RSI con umbrales ajustados para SOL"""
+        if len(df) < 30:
+            return {"rsi_actual": 50, "sobrecompra": False, "sobreventa": False}
+        
+        # Calcular RSI
+        rsi_period = self.parametros.get("rsi_period", 14)
+        rsi_indicator = ta.momentum.RSIIndicator(df['close'], window=rsi_period)
+        rsi = rsi_indicator.rsi()
+        
+        rsi_actual = float(rsi.iloc[-1])
+        
+        # Análisis de tendencia RSI (últimos 10 períodos)
+        rsi_reciente = rsi.iloc[-10:] if len(rsi) >= 10 else rsi
+        tendencia_rsi = "ALCISTA" if rsi_reciente.is_monotonic_increasing else                        "BAJISTA" if rsi_reciente.is_monotonic_decreasing else "NEUTRAL"
+        
+        return {
+            "rsi_actual": rsi_actual,
+            "sobrecompra": rsi_actual > 70,
+            "sobreventa": rsi_actual < 30,
+            "tendencia": tendencia_rsi
+        }
+    
+    async def analizar(self):
+        """Método principal de análisis - Devuelve señal si hay condiciones"""
+        try:
+            logger.info(f"🔍 Analizando {self.simbolo}...")
+            
+            # 1. Obtener datos
+            df = self.obtener_datos_binance(self.config.get("timeframe_analisis", "15m"), 200)
+            if df is None or df.empty:
+                logger.error(f"No se pudieron obtener datos para {self.simbolo}")
+                return None
+            
+            # 2. Calcular indicadores
+            precio_actual = float(df['close'].iloc[-1])
+            rsi_info = self.calcular_rsi_ajustado(df)
+            
+            # 3. Lógica de entrada (EJEMPLO - AJUSTAR DESPUÉS)
+            senal = None
+            
+            # Ejemplo: RSI oversold + precio en mínimo reciente
+            if rsi_info['sobreventa'] and precio_actual <= df['low'].tail(10).min():
+                senal = {
+                    'accion': 'COMPRAR',
+                    'precio_entrada': precio_actual,
+                    'stop_loss': precio_actual * 0.97,
+                    'take_profit': precio_actual * 1.06,
+                    'motivo': f"RSI oversold ({rsi_info['rsi_actual']:.1f,
+            'stop_loss': sl,
+            'take_profit': tp,
+            'fase_trailing': fase
+        }) + precio en mínimo reciente"
+                }
+            
+            # Ejemplo: RSI overbought + precio en máximo reciente
+            elif rsi_info['sobrecompra'] and precio_actual >= df['high'].tail(10).max():
+                senal = {
+                    'accion': 'VENDER',
+                    'precio_entrada': precio_actual,
+                    'stop_loss': precio_actual * 1.03,
+                    'take_profit': precio_actual * 0.94,
+                    'motivo': f"RSI overbought ({rsi_info['rsi_actual']:.1f,
+            'stop_loss': sl,
+            'take_profit': tp,
+            'fase_trailing': fase
+        }) + precio en máximo reciente"
+                }
+            
+            if senal:
+                logger.info(f"🚨 Señal {self.simbolo}: {senal['accion']} - {senal['motivo']}")
+                return senal
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error en análisis {self.simbolo}: {e}")
+            return None

@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/iniciar_sistema_futures.py", line 18, in main
+    from core.sistema_principal_futures import SistemaPrincipalFutures
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/core/sistema_principal_futures.py", line 31, in <module>
+    from cerebros.cerebro_sol import CerebroSOL
+  File "/data/data/com.termux/files/home/bot_trading/trading_brain/cerebros/cerebro_sol.py", line 7
+    def __init__(self):
+    ^^^
+IndentationError: expected an indented block after class definition on line 6
+🚀 Iniciando Sistema de Trading Futures...
+📁 Directorio: /data/data/com.termux/files/home/bot_trading/trading_brain
+❌ Error inesperado: expected an indented block after class definition on line 6 (cerebro_sol.py, line 7)

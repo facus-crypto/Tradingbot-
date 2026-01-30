@@ -1,0 +1,47 @@
+{
+  "binance": {
+    "api_key": "uDLz2UjKBfY6Nhj9Q9paxpFMUmCQkmw71knczVmuelu9v80RwAvwCosOwwScHepL",
+    "api_secret": "cx7n5YHG8jDKY10tS1ejsj2wShnNdT3qvsaFClZPpbVIDQZFouxkB1llfzsY34y4",
+    "testnet": true,
+    "leverage": 2,
+    "margin_type": "ISOLATED",
+    "position_percent": 0.25,
+    "risk_per_trade": 0.02
+  },
+  "telegram": {
+    "token": "TU_BOT_TOKEN_AQUI",
+    "chat_id": "TU_CHAT_ID_AQUI",
+    "notificar_se\u00f1ales": false,
+    "notificar_errores": false,
+    "notificar_cierre": false
+  },
+  "cerebros": {
+    "BTCUSDT": {
+      "activo": true,
+      "estrategia": "ema_ribbon_rsi"
+    },
+    "ETHUSDT": {
+      "activo": true,
+      "estrategia": "macd_bollinger"
+    },
+    "SOLUSDT": {
+      "activo": true,
+      "estrategia": "rsi_ajustado"
+    },
+    "LINKUSDT": {
+      "activo": true,
+      "estrategia": "fibonacci_ichimoku"
+    },
+    "BNBUSDT": {
+      "activo": true,
+      "estrategia": "adx_volume_profile"
+    }
+  },
+  "sistema": {
+    "intervalo_analisis": 120,
+    "max_posiciones_simultaneas": 3,
+    "stop_loss_diario": 0.05,
+    "modo_prueba": true,
+    "log_level": "INFO"
+  }
+}

@@ -1,0 +1,721 @@
+"""
+SISTEMA PRINCIPAL ACTUALIZADO PARA BINANCE FUTURES
+Integra 5 cerebros especializados + Telegram avanzado + Ejecución real
+"""
+import logging
+import asyncio
+import sys
+import os
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+import json
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('trading_system.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Añadir directorio actual al path
+sys.path.append('.')
+
+# Importar cerebros actualizados
+try:
+    from cerebros.cerebro_base_futures import CerebroFuturesBase
+    from cerebros.cerebro_btc_futures import CerebroBTC
+    from cerebros.cerebro_eth_futures import CerebroETH
+    from cerebros.cerebro_sol_futures import CerebroSOL
+    from cerebros.cerebro_link_futures import CerebroLINK
+    from cerebros.cerebro_bnb_futures import CerebroBNB
+    
+    CEREBROS_IMPORTADOS = True
+    logger.info("✅ Todos los cerebros Futures importados correctamente")
+except ImportError as e:
+    CEREBROS_IMPORTADOS = False
+    logger.error(f"❌ Error importando cerebros: {e}")
+
+# Importar gestor Binance (ya existente)
+try:
+    from binance_manager_custom import get_binance_manager
+    BINANCE_IMPORTADO = True
+except ImportError:
+    BINANCE_IMPORTADO = False
+    logger.warning("⚠️  BinanceFuturesManager no encontrado, usando simulación")
+
+# Importar Telegram avanzado (ya existente)
+try:
+    from interfaces.telegram_advanced import TelegramAdvancedBot
+    TELEGRAM_IMPORTADO = True
+except ImportError:
+    TELEGRAM_IMPORTADO = False
+    logger.warning("⚠️  TelegramAdvancedBot no encontrado")
+
+class SistemaPrincipalFutures:
+    """
+    Sistema principal que coordina 5 cerebros de trading con Binance Futures
+    """
+    
+    def __init__(self, config_path: str = "config_futures.json"):
+        """
+        Inicializa el sistema completo
+        
+        Args:
+            config_path: Ruta al archivo de configuración
+        """
+        self.config = self.cargar_configuracion(config_path)
+        self.estado = "INICIALIZANDO"
+        self.iniciado_en = datetime.now()
+        
+        # Instancias principales
+        self.binance_manager = None
+        self.telegram_bot = None
+        self.cerebros = {}
+        
+        # Control de ciclo
+        self.ciclo_activo = False
+        self.intervalo_analisis = 60  # segundos entre análisis
+        self.max_ciclos = None  # None para infinito
+        
+        # Estadísticas
+        self.estadisticas = {
+            'ciclos_completados': 0,
+            'señales_generadas': 0,
+            'señales_enviadas_telegram': 0,
+            'errores': 0,
+            'ultimo_ciclo': None,
+            'posiciones_activas': 0
+        }
+        
+        # Cache de datos
+        self.datos_cache = {}
+        self.cache_validez = 300  # segundos
+        
+        logger.info("🚀 Sistema Principal Futures inicializado")
+    
+    def cargar_configuracion(self, config_path: str) -> Dict:
+        """Carga la configuración desde archivo JSON"""
+        config_default = {
+            "binance": {
+                "api_key": "",
+                "api_secret": "",
+                "testnet": False,
+                "leverage": 2,
+                "margin_type": "ISOLATED",
+                "position_percent": 0.25,
+                "risk_per_trade": 0.02
+            },
+            "telegram": {
+                "token": "",
+                "chat_id": "",
+                "notificar_señales": True,
+                "notificar_errores": True,
+                "notificar_cierre": True
+            },
+            "cerebros": {
+                "BTCUSDT": {"activo": True, "estrategia": "ema_ribbon_rsi"},
+                "ETHUSDT": {"activo": True, "estrategia": "macd_bollinger"},
+                "SOLUSDT": {"activo": True, "estrategia": "rsi_ajustado"},
+                "LINKUSDT": {"activo": True, "estrategia": "fibonacci_ichimoku"},
+                "BNBUSDT": {"activo": True, "estrategia": "adx_volume_profile"}
+            },
+            "sistema": {
+                "intervalo_analisis": 60,
+                "max_posiciones_simultaneas": 3,
+                "stop_loss_diario": 0.05,
+                "modo_prueba": False,
+                "log_level": "INFO"
+            }
+        }
+        
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                logger.info(f"✅ Configuración cargada desde {config_path}")
+                
+                # Combinar con defaults para valores faltantes
+                for key, value in config_default.items():
+                    if key not in config:
+                        config[key] = value
+                    elif isinstance(value, dict):
+                        for subkey, subvalue in value.items():
+                            if subkey not in config[key]:
+                                config[key][subkey] = subvalue
+                
+                return config
+            else:
+                logger.warning(f"⚠️  Archivo de configuración {config_path} no encontrado, usando defaults")
+                return config_default
+                
+        except Exception as e:
+            logger.error(f"❌ Error cargando configuración: {e}")
+            return config_default
+    
+    async def inicializar_binance(self) -> bool:
+        """Inicializa conexión con Binance Futures"""
+        if not BINANCE_IMPORTADO:
+            logger.warning("⚠️  BinanceFuturesManager no disponible, usando modo simulación")
+            self.binance_manager = self.SimuladorBinance()
+            return True
+        
+        try:
+            api_key = self.config['binance']['api_key']
+            api_secret = self.config['binance']['api_secret']
+            
+            if not api_key or not api_secret:
+                logger.warning("⚠️  API keys de Binance no configuradas, usando simulación")
+                self.binance_manager = self.SimuladorBinance()
+                return True
+            
+            self.binance_manager = get_binance_manager(
+                api_key=api_key,
+                api_secret=api_secret,
+                testnet=self.config['binance']['testnet']
+            )
+            
+            # Configurar leverage y margen
+            await self.binance_manager.set_leverage(
+                leverage=self.config['binance']['leverage']
+            )
+            await self.binance_manager.set_margin_type(
+                margin_type=self.config['binance']['margin_type']
+            )
+            
+            # Obtener balance
+            balance = await self.binance_manager.get_balance()
+            logger.info(f"💰 Balance Binance: {balance:.2f} USDT")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error inicializando Binance: {e}")
+            self.binance_manager = self.SimuladorBinance()
+            return False
+    
+    async def inicializar_telegram(self) -> bool:
+        """Inicializa bot de Telegram avanzado"""
+        if not TELEGRAM_IMPORTADO:
+            logger.warning("⚠️  TelegramAdvancedBot no disponible")
+            return False
+        
+        try:
+            token = self.config['telegram']['token']
+            chat_id = self.config['telegram']['chat_id']
+            
+            if not token:
+                logger.warning("⚠️  Token de Telegram no configurado")
+                return False
+            
+            self.telegram_bot = TelegramAdvancedBot(
+                bot_token=token,
+                chat_id=chat_id,
+                binance_manager=self.binance_manager
+            )
+            
+            await self.telegram_bot.start()
+            logger.info("✅ Bot de Telegram inicializado")
+            
+            # Enviar mensaje de inicio
+            mensaje_inicio = (
+                "🚀 *SISTEMA DE TRADING FUTURES INICIADO*\n"
+                f"• Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"• Cerebros activos: {len([c for c in self.config['cerebros'].values() if c['activo']])}/5\n"
+                f"• Intervalo análisis: {self.config['sistema']['intervalo_analisis']}s\n"
+                f"• Modo: {'PRUEBA' if self.config['sistema']['modo_prueba'] else 'REAL'}"
+            )
+            
+            await self.telegram_bot.send_message(mensaje_inicio)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error inicializando Telegram: {e}")
+            return False
+    
+    async def inicializar_cerebros(self) -> bool:
+        """Inicializa todos los cerebros de trading"""
+        if not CEREBROS_IMPORTADOS:
+            logger.error("❌ No se pudieron importar los cerebros")
+            return False
+        
+        try:
+            cerebros_config = self.config['cerebros']
+            cerebro_btc = None
+            
+            # 1. Inicializar BTC primero (para correlación con BNB)
+            if cerebros_config['BTCUSDT']['activo']:
+                cerebro_btc = CerebroBTC(
+                    binance_manager=self.binance_manager,
+                    telegram_bot=self.telegram_bot
+                )
+                self.cerebros['BTCUSDT'] = cerebro_btc
+                logger.info(f"✅ Cerebro BTC inicializado - {cerebro_btc.estrategia}")
+            
+            # 2. Inicializar los demás cerebros
+            cerebros_a_inicializar = [
+                ('ETHUSDT', CerebroETH),
+                ('SOLUSDT', CerebroSOL),
+                ('LINKUSDT', CerebroLINK)
+            ]
+            
+            for simbolo, clase_cerebro in cerebros_a_inicializar:
+                if cerebros_config[simbolo]['activo']:
+                    cerebro = clase_cerebro(binance_manager=self.binance_manager, 
+                        telegram_bot=self.telegram_bot
+                    )
+                    self.cerebros[simbolo] = cerebro
+                    logger.info(f"✅ Cerebro {simbolo} inicializado - {cerebro.estrategia}")
+            
+            # 3. Inicializar BNB con referencia a BTC (para correlación)
+            if cerebros_config['BNBUSDT']['activo']:
+                cerebro_bnb = CerebroBNB(
+                    binance_manager=self.binance_manager,
+                    telegram_bot=self.telegram_bot,
+                    btc_cerebro=cerebro_btc
+                )
+                self.cerebros['BNBUSDT'] = cerebro_bnb
+                logger.info(f"✅ Cerebro BNB inicializado - {cerebro_bnb.estrategia}")
+            
+            logger.info(f"🎯 Total cerebros inicializados: {len(self.cerebros)}/5")
+            return len(self.cerebros) > 0
+            
+        except Exception as e:
+            logger.error(f"❌ Error inicializando cerebros: {e}")
+            return False
+    
+    async def ciclo_analisis(self) -> Dict:
+        """
+        Ejecuta un ciclo completo de análisis con todos los cerebros
+        
+        Returns:
+            Dict con resultados del ciclo
+        """
+        resultados = {
+            'timestamp': datetime.now().isoformat(),
+            'cerebros_analizados': 0,
+            'señales_generadas': 0,
+            'señales_procesadas': 0,
+            'errores': 0,
+            'detalles': {}
+        }
+        
+        logger.info(f"🔄 Iniciando ciclo de análisis #{self.estadisticas['ciclos_completados'] + 1}")
+        
+        # Ejecutar análisis en paralelo para cada cerebro
+        tareas = []
+        for simbolo, cerebro in self.cerebros.items():
+            tareas.append(self.analizar_cerebro(simbolo, cerebro))
+        
+        # Esperar a que todos los cerebros terminen
+        if tareas:
+            resultados_cerebros = await asyncio.gather(*tareas, return_exceptions=True)
+            
+            for i, (simbolo, cerebro) in enumerate(self.cerebros.items()):
+                if i < len(resultados_cerebros):
+                    resultado = resultados_cerebros[i]
+                    
+                    if isinstance(resultado, Exception):
+                        resultados['errores'] += 1
+                        resultados['detalles'][simbolo] = {
+                            'estado': 'ERROR',
+                            'error': str(resultado)
+                        }
+                        logger.error(f"❌ Error en cerebro {simbolo}: {resultado}")
+                    else:
+                        resultados['cerebros_analizados'] += 1
+                        resultados['detalles'][simbolo] = resultado
+                        
+                        if resultado['senal_generada']:
+                            resultados['señales_generadas'] += 1
+                        
+                        if resultado['senal_procesada']:
+                            resultados['señales_procesadas'] += 1
+        
+        # Actualizar estadísticas
+        self.estadisticas['ciclos_completados'] += 1
+        self.estadisticas['señales_generadas'] += resultados['señales_generadas']
+        self.estadisticas['errores'] += resultados['errores']
+        self.estadisticas['ultimo_ciclo'] = resultados['timestamp']
+        
+        logger.info(f"✅ Ciclo completado: "
+                   f"{resultados['cerebros_analizados']} cerebros, "
+                   f"{resultados['señales_generadas']} señales, "
+                   f"{resultados['errores']} errores")
+        
+        return resultados
+    
+    async def analizar_cerebro(self, simbolo: str, cerebro: CerebroFuturesBase) -> Dict:
+        """
+        Ejecuta análisis para un cerebro específico
+        
+        Args:
+            simbolo: Símbolo del par
+            cerebro: Instancia del cerebro
+            
+        Returns:
+            Dict con resultados del análisis
+        """
+        resultado = {
+            'simbolo': simbolo,
+            'estado': 'INICIADO',
+            'senal_generada': False,
+            'senal_procesada': False,
+            'timestamp': datetime.now().isoformat(),
+            'error': None
+        }
+        
+        try:
+            # 1. Ejecutar análisis
+            senal = await cerebro.analizar()
+            
+            if senal:
+                resultado['senal_generada'] = True
+                resultado['senal'] = senal
+                resultado['estado'] = 'SEÑAL_GENERADA'
+                
+                logger.info(f"📡 {simbolo} - Señal {senal['action']} "
+                           f"(conf: {senal['confidence']:.0%})")
+                
+                # 2. Procesar señal (enviar a Telegram)
+                if self.telegram_bot and self.config['telegram']['notificar_señales']:
+                    procesamiento = await cerebro.procesar_senal(senal)
+                    
+                    if procesamiento['status'] == 'sent_to_telegram':
+                        resultado['senal_procesada'] = True
+                        resultado['estado'] = 'SEÑAL_ENVIADA'
+                        self.estadisticas['señales_enviadas_telegram'] += 1
+                        
+                        logger.info(f"📤 {simbolo} - Señal enviada a Telegram")
+                    else:
+                        resultado['error'] = procesamiento.get('error', 'Error desconocido')
+                        resultado['estado'] = 'ERROR_ENVIO'
+                        
+                        logger.warning(f"⚠️  {simbolo} - Error enviando señal: {resultado['error']}")
+            else:
+                resultado['estado'] = 'SIN_SEÑAL'
+                logger.debug(f"ℹ️  {simbolo} - Sin señal en este ciclo")
+        
+        except Exception as e:
+            resultado['estado'] = 'ERROR'
+            resultado['error'] = str(e)
+            logger.error(f"❌ {simbolo} - Error en análisis: {e}")
+        
+        return resultado
+    
+    async def obtener_posiciones_activas(self) -> List[Dict]:
+        """Obtiene posiciones activas desde Binance"""
+        if not self.binance_manager:
+            return []
+        
+        try:
+            if hasattr(self.binance_manager, 'get_positions'):
+                posiciones = await self.binance_manager.get_positions()
+                
+                # Filtrar posiciones con tamaño > 0
+                posiciones_activas = [
+                    pos for pos in posiciones 
+                    if abs(float(pos.get('positionAmt', 0))) > 0
+                ]
+                
+                self.estadisticas['posiciones_activas'] = len(posiciones_activas)
+                return posiciones_activas
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo posiciones: {e}")
+            return []
+    
+    async def enviar_estado_telegram(self):
+        """Envía estado del sistema a Telegram"""
+        if not self.telegram_bot:
+            return
+        
+        try:
+            # Obtener posiciones activas
+            posiciones = await self.obtener_posiciones_activas()
+            
+            # Construir mensaje
+            tiempo_activo = datetime.now() - self.iniciado_en
+            horas, remainder = divmod(int(tiempo_activo.total_seconds()), 3600)
+            minutos, _ = divmod(remainder, 60)
+            
+            mensaje = (
+                "📊 *ESTADO DEL SISTEMA*\n"
+                f"• Tiempo activo: {horas}h {minutos}m\n"
+                f"• Ciclos completados: {self.estadisticas['ciclos_completados']}\n"
+                f"• Señales generadas: {self.estadisticas['señales_generadas']}\n"
+                f"• Señales enviadas: {self.estadisticas['señales_enviadas_telegram']}\n"
+                f"• Posiciones activas: {len(posiciones)}\n"
+                f"• Último ciclo: {self.estadisticas['ultimo_ciclo'] or 'N/A'}\n"
+                f"• Estado actual: {self.estado}"
+            )
+            
+            # Añadir detalles de cerebros
+            mensaje += "\n\n🧠 *ESTADO CEREBROS:*\n"
+            for simbolo, cerebro in self.cerebros.items():
+                estado_cerebro = cerebro.get_estado()
+                mensaje += f"• {simbolo}: {estado_cerebro['estado']}\n"
+            
+            # Añadir posiciones activas si las hay
+            if posiciones:
+                mensaje += "\n💼 *POSICIONES ACTIVAS:*\n"
+                for pos in posiciones:
+                    simbolo = pos.get('symbol', '')
+                    cantidad = float(pos.get('positionAmt', 0))
+                    pnl = float(pos.get('unRealizedProfit', 0))
+                    
+                    if cantidad != 0:
+                        direccion = "LONG" if cantidad > 0 else "SHORT"
+                        mensaje += f"• {simbolo} {direccion}: {abs(cantidad):.4f} (PNL: {pnl:.2f} USDT)\n"
+            
+            await self.telegram_bot.enviar_mensaje(mensaje)
+            logger.info("📊 Estado del sistema enviado a Telegram")
+            
+        except Exception as e:
+            logger.error(f"❌ Error enviando estado a Telegram: {e}")
+    
+    async def ejecutar_ciclo_continuo(self):
+        """Ejecuta ciclos de análisis de forma continua"""
+        self.ciclo_activo = True
+        self.estado = "EJECUTANDO"
+        
+        logger.info("🔄 Iniciando ciclo continuo de análisis")
+        
+        if self.telegram_bot:
+            await self.telegram_bot.enviar_mensaje(
+                "🔄 *INICIANDO CICLO CONTINUO DE ANÁLISIS*"
+            )
+        
+        ciclo_numero = 0
+        while self.ciclo_activo:
+            try:
+                ciclo_numero += 1
+                logger.info(f"🔄 Ciclo #{ciclo_numero} iniciado")
+                
+                # Ejecutar ciclo de análisis
+                resultados = await self.ciclo_analisis()
+                
+                # Enviar estado cada 10 ciclos o cada 10 minutos
+                if ciclo_numero % 10 == 0:
+                    await self.enviar_estado_telegram()
+                
+                # Verificar stop loss diario
+                if await self.verificar_stop_loss_diario():
+                    logger.warning("⛔ Stop loss diario alcanzado, deteniendo sistema")
+                    await self.detener()
+                    break
+                
+                # Esperar para siguiente ciclo
+                logger.info(f"⏳ Esperando {self.intervalo_analisis}s para próximo ciclo...")
+                await asyncio.sleep(self.intervalo_analisis)
+                
+                # Verificar si se alcanzó el máximo de ciclos
+                if self.max_ciclos and ciclo_numero >= self.max_ciclos:
+                    logger.info(f"✅ Máximo de {self.max_ciclos} ciclos alcanzado")
+                    await self.detener()
+                    break
+                    
+            except asyncio.CancelledError:
+                logger.info("Ciclo cancelado por usuario")
+                break
+                
+            except Exception as e:
+                logger.error(f"❌ Error en ciclo continuo: {e}")
+                self.estadisticas['errores'] += 1
+                
+                # Esperar antes de reintentar
+                await asyncio.sleep(30)
+    
+    async def verificar_stop_loss_diario(self) -> bool:
+        """Verifica si se alcanzó el stop loss diario"""
+        try:
+            if not self.binance_manager:
+                return False
+            
+            # Obtener P&L del día
+            if hasattr(self.binance_manager, 'get_daily_pnl'):
+                daily_pnl = await self.binance_manager.get_daily_pnl()
+                stop_loss_diario = self.config['sistema']['stop_loss_diario']
+                
+                if daily_pnl < 0 and abs(daily_pnl) >= stop_loss_diario:
+                    logger.error(f"⛔ Stop loss diario alcanzado: {daily_pnl:.2f} USDT")
+                    
+                    if self.telegram_bot:
+                        mensaje = (
+                            f"⛔ *STOP LOSS DIARIO ALCANZADO*\n"
+                            f"• Pérdida hoy: {daily_pnl:.2f} USDT\n"
+                            f"• Límite: {stop_loss_diario} USDT\n"
+                            f"• Sistema detenido automáticamente"
+                        )
+                        await self.telegram_bot.enviar_mensaje(mensaje)
+                    
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error verificando stop loss diario: {e}")
+            return False
+    
+    async def iniciar(self):
+        """Inicia el sistema completo"""
+        try:
+            logger.info("🚀 Iniciando Sistema Principal Futures...")
+            self.estado = "INICIANDO"
+            
+            # 1. Inicializar Binance
+            logger.info("1️⃣ Inicializando Binance Futures...")
+            binance_ok = await self.inicializar_binance()
+            
+            if not binance_ok:
+                logger.warning("⚠️  Binance no inicializado correctamente, continuando en modo simulación")
+            
+            # 2. Inicializar Telegram
+            logger.info("2️⃣ Inicializando Telegram...")
+            telegram_ok = await self.inicializar_telegram()
+            
+            if not telegram_ok:
+                logger.warning("⚠️  Telegram no inicializado, continuando sin notificaciones")
+            
+            # 3. Inicializar cerebros
+            logger.info("3️⃣ Inicializando cerebros...")
+            cerebros_ok = await self.inicializar_cerebros()
+            
+            if not cerebros_ok:
+                logger.error("❌ No se pudieron inicializar cerebros, abortando")
+                return False
+            
+            # 4. Configurar intervalo de análisis
+            self.intervalo_analisis = self.config['sistema']['intervalo_analisis']
+            
+            # 5. Iniciar ciclo continuo
+            logger.info("✅ Sistema inicializado correctamente")
+            self.estado = "LISTO"
+            
+            if self.telegram_bot:
+                await self.telegram_bot.enviar_mensaje(
+                    "✅ *SISTEMA INICIALIZADO CORRECTAMENTE*\n"
+                    "Ciclo continuo de análisis iniciado"
+                )
+            
+            # Ejecutar en segundo plano
+            asyncio.create_task(self.ejecutar_ciclo_continuo())
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error iniciando sistema: {e}")
+            self.estado = "ERROR"
+            return False
+    
+    async def detener(self):
+        """Detiene el sistema de forma controlada"""
+        logger.info("🛑 Deteniendo Sistema Principal Futures...")
+        self.ciclo_activo = False
+        self.estado = "DETENIENDO"
+        
+        # Enviar mensaje final a Telegram
+        if self.telegram_bot:
+            tiempo_activo = datetime.now() - self.iniciado_en
+            horas, remainder = divmod(int(tiempo_activo.total_seconds()), 3600)
+            minutos, _ = divmod(remainder, 60)
+            
+            resumen = (
+                f"🛑 *SISTEMA DETENIDO*\n"
+                f"• Tiempo activo: {horas}h {minutos}m\n"
+                f"• Ciclos completados: {self.estadisticas['ciclos_completados']}\n"
+                f"• Señales generadas: {self.estadisticas['señales_generadas']}\n"
+                f"• Errores: {self.estadisticas['errores']}\n"
+                f"• Gracias por usar el sistema!"
+            )
+            
+            await self.telegram_bot.enviar_mensaje(resumen)
+        
+        self.estado = "DETENIDO"
+        logger.info("✅ Sistema detenido correctamente")
+    
+    class SimuladorBinance:
+        """Simulador de Binance para desarrollo y pruebas"""
+        
+        def __init__(self):
+            self.balance = 10000.0
+            self.positions = {}
+            logger.info("🤖 Simulador Binance inicializado (modo prueba)")
+        
+        async def get_balance(self) -> float:
+            """Devuelve balance simulado"""
+            return self.balance
+        
+        async def set_leverage(self, leverage: int):
+            """Configura leverage (simulado)"""
+            logger.debug(f"🤖 Simulador: Leverage configurado a {leverage}X")
+        
+        async def set_margin_type(self, margin_type: str):
+            """Configura tipo de margen (simulado)"""
+            logger.debug(f"🤖 Simulador: Margen configurado a {margin_type}")
+        
+        def get_symbol_price(self, symbol: str) -> float:
+            """Devuelve precio simulado"""
+            # Precios base aproximados
+            precios_base = {
+                'BTCUSDT': 62500.0,
+                'ETHUSDT': 3450.0,
+                'SOLUSDT': 145.0,
+                'LINKUSDT': 18.5,
+                'BNBUSDT': 580.0
+            }
+            
+            precio = precios_base.get(symbol, 100.0)
+            # Añadir algo de variación aleatoria
+            import random
+            variacion = random.uniform(-0.005, 0.005)
+            return precio * (1 + variacion)
+        
+        async def get_positions(self) -> List[Dict]:
+            """Devuelve posiciones simuladas"""
+            return []
+
+# Punto de entrada principal
+async def main():
+    """Función principal para ejecutar el sistema"""
+    print("=" * 60)
+    print("🚀 SISTEMA PRINCIPAL DE TRADING FUTURES")
+    print("=" * 60)
+    
+    # Crear instancia del sistema
+    sistema = SistemaPrincipalFutures()
+    
+    try:
+        # Iniciar sistema
+        inicio_exitoso = await sistema.iniciar()
+        
+        if not inicio_exitoso:
+            print("❌ Error iniciando el sistema")
+            return
+        
+        print("✅ Sistema iniciado correctamente")
+        print("📊 Presiona Ctrl+C para detener")
+        
+        # Mantener el programa corriendo
+        while sistema.estado == "EJECUTANDO":
+            await asyncio.sleep(1)
+            
+    except KeyboardInterrupt:
+        print("\n🛑 Detención solicitada por usuario")
+        await sistema.detener()
+        
+    except Exception as e:
+        print(f"❌ Error crítico: {e}")
+        await sistema.detener()
+    
+    print("👋 Programa terminado")
+
+if __name__ == "__main__":
+    # Ejecutar sistema
+    asyncio.run(main())
